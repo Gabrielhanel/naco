@@ -15,7 +15,6 @@ Mais do que entregar funcionalidades, o NɅCO funciona como um laboratório de a
 - Desenvolver uma aplicação de pedidos de comida com experiência mobile para clientes e painel web para gestão de restaurantes.
 - Aplicar conhecimentos de desenvolvimento full stack e engenharia de software em um projeto evolutivo.
 - Praticar arquitetura, modelagem de dados, construção de APIs, testes automatizados, segurança e observabilidade.
-- Explorar o uso consciente de IA, vibecoding e engenharia de prompt durante o desenvolvimento.
 - Manter o projeto aberto para estudo, colaboração e possíveis adaptações pela comunidade.
 
 ## Visão geral
