@@ -8,8 +8,6 @@ O NɅCO é um projeto de código aberto voltado para a área alimentícia. Inspi
 
 O NɅCO nasceu com o objetivo de ser muito mais do que um simples aplicativo. Meu nome é Gabriel, sou estudante de Ciência da Computação e apaixonado por tecnologia. Criei este projeto para aplicar e aprofundar meus conhecimentos conforme avanço na minha formação e na minha carreira, além de contribuir com a comunidade por meio de uma solução aberta, que possa ser estudada, adaptada e utilizada como referência em outros projetos.
 
-O desenvolvimento também é uma oportunidade prática de explorar **vibecoding** e aprimorar conceitos de **engenharia de prompt**. A ideia é utilizar ferramentas de IA como apoio ao processo de desenvolvimento, exercitando a capacidade de especificar problemas, estruturar instruções, avaliar resultados, identificar falhas e revisar soluções. A assistência de IA não substitui a análise técnica: decisões de arquitetura, validações, testes e evolução do código fazem parte do aprendizado e da responsabilidade do desenvolvimento.
-
 Mais do que entregar funcionalidades, o NɅCO funciona como um laboratório de aprendizado em engenharia de software, no qual pretendo evoluir gradualmente a arquitetura, a qualidade do código, a segurança, os testes e a experiência de uso.
 
 ## Objetivos
