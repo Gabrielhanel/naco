@@ -2,11 +2,13 @@
 
 **Nota de origem:** QU-01 a QU-19 detalham critérios centrais do RNF-01; QU-20 a QU-73 são complementações técnicas propostas durante a análise e aceitas pelo usuário. Elas não são questões originalmente numeradas no documento-base. QU-57 a QU-73 foram aceitas em conjunto por autorização expressa para prosseguir com todas as recomendações apresentadas.
 
+> **Leitura do registro:** as linhas QU preservam a formulação aprovada no momento da decisão. Quando uma questão foi posteriormente esclarecida no adendo complementar v1.2, a nota histórica na própria linha indica que a interpretação vigente é a do adendo. Não tratar ressalvas históricas como pendências atuais.
+
 ## QU-01 a QU-19 — Critérios centrais de desempenho
 
 | ID | Decisão aprovada |
 |---|---|
-| QU-01 | Operações medidas: listar restaurantes; detalhes de restaurante; listar produtos; detalhes de produto; login/autenticação; criar pedido; pedidos do cliente; pedidos recebidos pelo restaurante; painel de gerenciamento. Não adicionar outra operação sem revisão. A rota de pedidos recebidos mantém conflito de ator/finalidade. |
+| QU-01 | Operações medidas: listar restaurantes; detalhes de restaurante; listar produtos; detalhes de produto; login/autenticação; criar pedido; pedidos do cliente; pedidos recebidos pelo restaurante; painel de gerenciamento. Não adicionar outra operação sem revisão. **Nota histórica:** ator/finalidade/método da listagem de pedidos recebidos foram corrigidos posteriormente pelo adendo complementar v1.2. |
 | QU-02 | P95: até 2 s para operações comuns; até 3 s para criação de pedido. |
 | QU-03 | Taxa máxima de erros técnicos de 1%; contar HTTP 5xx, timeouts e falhas inesperadas; excluir recusas legítimas como 409 de estoque insuficiente. 401 inesperado em fluxo autenticado deve ser investigado. |
 | QU-04 | Carga sustentada por 60 minutos. |
@@ -90,7 +92,7 @@
 | QU-57 | Normalizar payload, ordenar itens deterministicamente e calcular hash dos campos relevantes. |
 | QU-58 | Considerar restaurante, produtos, quantidades e demais campos que efetivamente alterem o pedido; ignorar formatação irrelevante. Lista exata de campos permanece para contrato/schema. |
 | QU-59 | Persistir chave, usuário, hash do payload, estado do processamento e referência/resultado do pedido. |
-| QU-60 | Garantir atomicidade do registro idempotente, criação do pedido e operações relacionadas ao estoque. **Ressalva:** a fronteira transacional com estoque precisa de aprovação, pois a regra funcional anterior determina baixa apenas na confirmação, não na criação. |
+| QU-60 | Garantir atomicidade do registro idempotente, criação do pedido e operações relacionadas ao estoque. **Nota histórica:** a ressalva foi resolvida posteriormente pelo adendo complementar v1.2 em duas fronteiras transacionais, mantendo estoque sem baixa na criação e baixa somente na confirmação. |
 | QU-61 | Diferenciar internamente chave inexistente, expirada, pertencente a outro usuário e operação em processamento, sem expor informações indevidas. |
 | QU-62 | Para mesma chave concorrente, garantir processamento único; demais requisições recuperam o mesmo resultado ou estado. |
 
@@ -130,3 +132,13 @@
 | **Total planejado** | **130** |
 
 As quantidades são planejamento de testes, não evidência de execução.
+
+## Decisões complementares aprovadas — produto e mídia (09/11/2026)
+
+| ID | Decisão aprovada |
+|---|---|
+| DEC-PROD-REV-01 | Avaliações continuam `PRODUCT_ONLY`, uma por `OrderItem` de pedido próprio `CONCLUIDO`, nota 1–5 e comentário opcional; leitura de avaliações e comentários é pública, inclusive para visitantes sem login. O autor é exibido como “Cliente verificado”, sem dados pessoais. |
+| DEC-MEDIA-01 | Cloudinary é o fornecedor de mídia do MVP, priorizando o plano Free sem cartão de crédito. O backend mantém validação, sanitização, conversão WebP e controle do ciclo de vida; integração fica atrás de `StoragePort`. |
+| DEC-MEDIA-02 | Ao atingir o limite interno de uso gratuito, bloquear novos uploads, alertar ADMIN e preservar imagens existentes. Não usar fallback automático para outro fornecedor. |
+| DEC-BILLING-01 | Não cadastrar cartão, contratar plano pago, executar upgrade ou gerar cobrança sem autorização explícita do proprietário do projeto. |
+| DEC-MEDIA-03 | Q77–Q86 são adaptadas ao Cloudinary: usar `destroy` com `invalidate=true`; persistir operação e retries transitórios; não alegar confirmação global de purge nem polling por ID/status que o contrato padrão não oferece. Aceita-se invalidação best effort e possível permanência temporária em caches externos. |

@@ -39,7 +39,7 @@ As aplicações mobile e web compartilham o mesmo backend. A arquitetura inicial
 - Carrinho local, com itens de um único restaurante por vez.
 - Checkout e criação de pedidos demonstrativos.
 - Acompanhamento do estado do pedido e consulta ao histórico.
-- Avaliação de produtos adquiridos em pedidos concluídos.
+- Avaliação de produtos adquiridos em pedidos concluídos, com consulta pública das avaliações e comentários por qualquer visitante.
 
 ### Responsável pelo restaurante
 - Cadastro e manutenção de restaurante, conforme permissões.
@@ -107,7 +107,7 @@ A stack registrada para o MVP é:
 | Validação de dados | Zod |
 | Contrato e documentação da API | OpenAPI |
 | Comunicação HTTP nas interfaces | Axios |
-| Armazenamento de imagens | Cloudinary, por meio de uma abstração de storage |
+| Armazenamento de imagens | Cloudinary via `StoragePort` |
 | Testes de backend | Vitest + Supertest |
 | Testes de interface | React Testing Library |
 | Testes mobile ponta a ponta | Appium |
@@ -138,7 +138,7 @@ A documentação técnica e funcional do NɅCO está organizada na pasta `docs/`
 Consulte o [Índice da documentação](docs/README.md) para acessar:
 
 - Especificação de requisitos e decisões complementares.
-- Arquitetura, modelo de dados e contratos da API.
+- Arquitetura, modelo de dados, contratos da API e especificação de armazenamento/processamento de imagens.
 - Registro de decisões técnicas.
 - Planejamento e cronograma de desenvolvimento.
 - Estratégia de testes e relatórios de auditoria.
@@ -160,7 +160,7 @@ Consulte [`docs/README.md`](docs/README.md) para o índice da documentação.
 
 O NɅCO está em fase de preparação e implementação evolutiva. A documentação registra as decisões de produto e arquitetura que orientam o MVP, mas isso não significa que todas as funcionalidades estejam concluídas, testadas ou prontas para produção.
 
-A implementação deve avançar em incrementos pequenos e verificáveis. Antes de congelar contratos definitivos, eventuais conflitos e pendências identificados nos documentos devem ser resolvidos e refletidos na especificação e na OpenAPI.
+A implementação deve avançar em incrementos pequenos e verificáveis. As decisões de domínio e os contratos de alto nível já estão consolidados na documentação; a OpenAPI será criada como artefato executável na etapa de desenvolvimento, antes do freeze da API. Schema físico, migrations, código e testes também serão produzidos nessa etapa.
 
 ## Como contribuir
 
@@ -174,4 +174,4 @@ O projeto é aberto a estudo, sugestões e contribuições. Antes de propor muda
 
 ## Licença
 
-A licença de código aberto deve ser definida e incluída no repositório antes da publicação de uma versão que estabeleça formalmente os termos de uso e contribuição.
+O repositório inclui o arquivo `LICENSE` com os termos da licença MIT. Consulte o próprio arquivo para o texto integral da licença aplicável.

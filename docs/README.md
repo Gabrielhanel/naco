@@ -1,6 +1,6 @@
 # Documentação do NɅCO
 
-Este diretório reúne a documentação funcional, técnica e de planejamento do NɅCO.
+Este diretório reúne a documentação funcional, técnica e de planejamento do NɅCO. A especificação de imagens Q63–Q103 é complementar e independente do registro QU do RNF-01.
 
 ## Requisitos e escopo
 
@@ -10,6 +10,8 @@ Este diretório reúne a documentação funcional, técnica e de planejamento do
 ## Arquitetura
 
 - [Modelo de dados e API](architecture/02_MODELO_DADOS_E_API.md)
+- [Armazenamento e processamento de imagens (Q63–Q103)](architecture/05_ARMAZENAMENTO_E_PROCESSAMENTO_DE_IMAGENS.md)
+- [Armazenamento e processamento de imagens (PDF)](architecture/05_ARMAZENAMENTO_E_PROCESSAMENTO_DE_IMAGENS.pdf)
 - [Arquitetura e especificação técnica](architecture/NACO_ARQUITETURA_ESPECIFICACAO_TECNICA.md)
 - [Arquitetura e especificação técnica (PDF)](architecture/NACO_ARQUITETURA_ESPECIFICACAO_TECNICA.pdf)
 
@@ -28,7 +30,9 @@ Este diretório reúne a documentação funcional, técnica e de planejamento do
 
 ## Contrato da API
 
- - O arquivo `api/openapi.yaml` ainda não foi desenvolvido.
+- O arquivo `api/openapi.yaml` ainda não foi criado; sua produção está planejada para a etapa de desenvolvimento, a partir das rotas, DTOs e convenções já consolidados em `architecture/02_MODELO_DADOS_E_API.md` e `requirements/NACO_DECISOES_COMPLEMENTARES_MVP.md`.
+- Cloudinary foi escolhido para o MVP via `StoragePort`; o contrato HTTP do upload pelo responsável e o mecanismo operacional de reprocessamento de exclusão serão definidos antes de implementar essas operações.
+- A documentação lógica não representa schema Prisma, migrations, código ou testes já executados.
 
 ## Recursos visuais
 

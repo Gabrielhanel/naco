@@ -1,7 +1,7 @@
 # NɅCO — Decisões complementares para início do desenvolvimento
 
-**Versão:** 1.0  
-**Data:** 02/11/2026  
+**Versão:** 1.2  
+**Data:** 09/11/2026  
 **Finalidade:** complementar `01_ESPECIFICACAO_CONSOLIDADA.md`, `02_MODELO_DADOS_E_API.md`, `03_REGISTRO_DECISOES_RNF01.md` e `04_RELATORIO_COMPARATIVO_E_AUDITORIA.md`, fechando padrões de implementação necessários ao MVP.
 
 > Este documento é um adendo de decisões. Não substitui os documentos-base e não altera os RF-01 a RF-09, RN-01 a RN-09, RNF-01 ou RNF-02. As decisões abaixo foram adotadas com base na autorização do usuário para aceitar as opções tecnicamente recomendadas. Onde há impacto em contrato legado, a recomendação é explícita e deve ser incorporada aos documentos antes de congelar a API.
@@ -13,6 +13,7 @@
 - A regra de estoque permanece inequívoca: **criar pedido não baixa nem reserva estoque; confirmar pedido baixa; cancelar pedido já confirmado restaura uma única vez**.
 - As operações de pedidos recebidos deixam de tratar `GET` como mutação. `GET` consulta; `PATCH` altera estado.
 - A avaliação é `PRODUCT_ONLY`, conforme decisão já aprovada. A rota antiga de avaliação de restaurante não deve ser implementada como está.
+- Decisão posterior aprovada: avaliações e comentários são públicos e qualquer visitante pode consultá-los sem login. O autor deve ser apresentado como “Cliente verificado”, sem exposição de dados pessoais.
 - Quando houver divergência entre este adendo e algum contrato legado, prevalece a regra de domínio aprovada; o contrato legado deve ser ajustado antes da implementação daquela operação.
 
 ## 2. Decisões pelas 14 etapas
@@ -39,8 +40,9 @@
 **Visualização por responsável**
 
 - Nova entidade lógica/física `OrderView`, com unicidade `(order_id, responsible_user_id)` e `first_viewed_at`.
-- Visualizar pedido significa abrir a tela de detalhes; carregar a lista não marca como visto.
-- Reabrir detalhes não altera o primeiro horário.
+- Carregar a lista não marca o pedido como visto.
+- Abrir os detalhes registra a primeira visualização por meio de `POST /api/orders/{orderId}/views`; o `GET /api/orders/{orderId}` permanece puro e somente consulta.
+- O registro é idempotente: a primeira data/hora é preservada; chamadas posteriores não a substituem.
 - Cada responsável possui seu próprio estado de visualização. A visualização de um não altera o contador dos demais.
 - O registro é preservado se o usuário perder autorização sobre o restaurante.
 - Contador de novos pedidos considera pedidos não visualizados e ainda ativos. `CONCLUIDO`, `RECUSADO` e `CANCELADO` saem do contador, sem apagar o histórico de visualização.
@@ -53,8 +55,9 @@
 - Atualizações externas refletem estado e histórico automaticamente; alterações locais ainda não enviadas são preservadas.
 - Após conflito, erro ou falha de comunicação em uma ação, consultar o estado atual antes de permitir nova tentativa.
 - Botão de ação fica desabilitado após o primeiro clique até haver resposta ou reconciliação.
-- `GET /api/orders/{orderId}` retorna detalhes, itens, snapshots, cliente, endereço de entrega e eventos cronológicos.
-- `PATCH /api/orders/{orderId}/status` recebe o estado de destino e é o único contrato de transição. O backend valida papel, propriedade, estado atual e transição permitida.
+- `GET /api/orders/{orderId}` retorna detalhes, itens, snapshots, cliente, endereço de entrega e eventos cronológicos, sem alterar estado ou gravar visualização.
+- `POST /api/orders/{orderId}/views` registra a primeira visualização do pedido para o responsável autorizado, sem alterar o pedido; repetir a chamada mantém `first_viewed_at` original.
+- `PATCH /api/orders/{orderId}/status` recebe o estado de destino e é o único contrato de transição de estado do pedido. O backend valida papel, propriedade, estado atual e transição permitida.
 - Aceitar: `CRIADO` → `CONFIRMADO_RESTAURANTE`; recusar: `CRIADO` → `RECUSADO`; avançar manualmente: `CONFIRMADO_RESTAURANTE` → `EM_PREPARO` → `SAIU_PARA_ENTREGA` → `CONCLUIDO`; cancelamentos obedecem estritamente à matriz aprovada por papel/estado.
 - Atualizações concorrentes ou transições inválidas retornam `409 ORDER_STATE_CONFLICT`; nenhuma alteração parcial é persistida.
 
@@ -72,7 +75,7 @@
 - Uma avaliação por `order_item_id`; nota inteira de 1 a 5; comentário opcional.
 - A entidade `Review` mantém apenas referência a `OrderItem`, nota, comentário e timestamps; não duplicar cliente, pedido ou restaurante.
 - Não implementar `/api/restaurants/{id}/reviews` como avaliação de restaurante. A referência legada deve ser removida ou marcada como substituída na documentação da API.
-- MVP permite criar avaliações vinculadas ao produto; a exposição pública de avaliações individuais não ganha uma rota nova nesta consolidação. Edição/exclusão pelo cliente não entram no primeiro corte.
+- MVP permite criar avaliações vinculadas ao produto e consultar publicamente avaliações individuais pela rota `GET /api/products/{productId}/reviews`. Edição/exclusão pelo cliente não entram no primeiro corte.
 
 ### Etapa 3 — Idempotência e transações de estoque
 
@@ -161,6 +164,7 @@
 - Mobile: access token em memória e refresh token em Keychain/Keystore por biblioteca segura. Web: refresh token em cookie `HttpOnly; Secure; SameSite=Lax`; access token somente em memória. Não guardar token em `localStorage`/`sessionStorage`.
 - Web deve ter proteção CSRF compatível com cookie em operações mutáveis, além de prevenção XSS, CSP e HTTPS.
 - JWT contém apenas identificador de usuário/sessão e claims técnicas mínimas; papéis e autorização por restaurante são verificados no servidor.
+- Uma conta pode manter CLIENTE e RESPONSAVEL simultaneamente. No MVP não há seletor de identidade/papel no login: o app mobile expõe fluxos de cliente (exige CLIENTE) e o web expõe gestão (exige RESPONSAVEL); o backend verifica o papel e ownership em cada operação. A existência dos dois papéis não cria contas ou sessões de identidade separadas.
 - Login: limite separado por identificador de conta e IP; referência inicial de 5 falhas por conta em 15 minutos e 30 tentativas por IP em 15 minutos, com atraso progressivo e resposta genérica. Cadastro: 5 tentativas por IP em 15 minutos. Limite geral inicial: 120 requisições/minuto por usuário autenticado; endpoints sensíveis têm limites próprios.
 - Rate limiting usa janela deslizante/token bucket e Redis; resposta `429` genérica, com `Retry-After` quando aplicável.
 - Validar e normalizar entradas no backend, usar queries parametrizadas/Prisma, limitar CORS às origens conhecidas, TLS, Helmet/CSP, upload validado por tipo/tamanho quando habilitado, segredos fora do Git e dependências verificadas no CI.
@@ -250,7 +254,7 @@ O identificador do cliente vem da sessão, nunca do body. Preços definitivos, n
 
 **Painel**
 
-- Preservar `GET /api/restaurant/dashboard`.
+- Preservar `GET /api/restaurant/dashboard`, exigindo `restaurantId` como parâmetro de consulta para identificar explicitamente qual restaurante gerenciado será agregado. O backend valida a autorização do responsável sobre esse restaurante.
 - Indicador “produtos vendidos” = soma de `OrderItem.quantity` em pedidos `CONCLUIDO` no período.
 - Indicador “avaliações recebidas” = quantidade de `Review` dos itens daquele restaurante no período de criação da avaliação.
 - Período padrão: últimos 30 dias; filtros de início/fim aceitos até no máximo 365 dias, interpretados no timezone do restaurante.
@@ -266,7 +270,7 @@ O identificador do cliente vem da sessão, nunca do body. Preços definitivos, n
 - Mobile: React Native + TypeScript + React Navigation + Axios.
 - Web: React + TypeScript + Axios.
 - Validação backend: Zod; contratos documentados em OpenAPI.
-- Imagens: Cloudinary no ambiente integrado; abstrair serviço de armazenamento para não acoplar domínio ao provedor.
+- Imagens: Cloudinary escolhido para o MVP no plano Free sem cartão. Upload, substituição e exclusão somente pelo backend, abstraídos por `StoragePort`; backend mantém validação/sanitização/conversão para WebP. Não há upgrade, cobrança ou cartão sem autorização explícita. Ao atingir o limite interno de uso, bloquear novos uploads e preservar as imagens existentes. Ver especificação Q63–Q103 adaptada ao Cloudinary.
 - Testes: Vitest para unidade; Supertest para API; React Testing Library para componentes; Appium para fluxos mobile; Grafana k6 para carga; Postman para exploração/manual; GitHub Actions para CI.
 - Desenvolvimento local: Docker Compose para PostgreSQL e Redis; `.env.example` sem segredos; migrações versionadas e seed de dados de desenvolvimento/admin controlado.
 - REST/HTTP; polling de 15 s para pedidos. WebSocket, SSE, filas/mensageria e microsserviços ficam fora do MVP.
@@ -326,6 +330,10 @@ O identificador do cliente vem da sessão, nunca do body. Preços definitivos, n
 - Os 1.000 VUs usam sessões persistentes e pool de contas de teste com papéis adequados; não autenticar a cada request. Concorrência de contas deve ser documentada para não confundir carga do produto com gargalo artificial de login.
 - Ambientes/datasets de carga são isolados; pedidos, usuários e endereços são sintéticos, sem dados pessoais reais.
 
+### Consolidação posterior — imagens e armazenamento (Q63–Q103)
+
+As decisões de upload, processamento e remoção estão detalhadas em `../architecture/05_ARMAZENAMENTO_E_PROCESSAMENTO_DE_IMAGENS.md`. O resumo vinculante inclui: Cloudinary no MVP via `StoragePort`; `public_id` único e imutável, `asset_id` e versão persistidos; JPEG/PNG/WebP estáticos, 5 MB e 40 MP; saída WebP até 1600×1600, EXIF removido e sRGB; operações persistentes de upload/eventos/exclusão; `destroy` com `invalidate=true` e invalidação best effort; retries transitórios, reconciliação, controle de concorrência e métricas. Permanecem a fechar antes da implementação: schema físico final, DTOs, limites concretos de recursos/timeouts, qualidade numérica WebP e integração da Admin API Usage para bloqueio preventivo.
+
 ## 3. Rotas consolidadas para orientar a API
 
 | Método | Rota | Uso |
@@ -350,18 +358,20 @@ O identificador do cliente vem da sessão, nunca do body. Preços definitivos, n
 | GET | `/api/orders` | Histórico do cliente autenticado. |
 | GET | `/api/restaurants/{restaurantId}/orders` | Pedidos do restaurante autorizado. |
 | GET | `/api/me/orders/inbox` | Pedidos consolidados de todos os restaurantes do responsável. |
-| GET | `/api/orders/{orderId}` | Detalhes e histórico do pedido. |
+| GET | `/api/orders/{orderId}` | Detalhes e histórico do pedido; leitura sem efeito colateral. |
+| POST | `/api/orders/{orderId}/views` | Registrar primeira visualização pelo responsável; operação idempotente. |
 | PATCH | `/api/orders/{orderId}/status` | Transição validada de estado. |
 | GET | `/api/orders/idempotency/{key}` | Consulta idempotência. |
-| POST | `/api/order-items/{orderItemId}/reviews` | Criar avaliação do produto adquirido. |
-| GET | `/api/restaurant/dashboard` | Indicadores do restaurante autorizado. |
+| POST | `/api/order-items/{orderItemId}/reviews` | Cliente autenticado cria avaliação do produto adquirido. |
+| GET | `/api/products/{productId}/reviews` | Consultar avaliações públicas do produto, sem autenticação. |
+| GET | `/api/restaurant/dashboard?restaurantId={restaurantId}` | Indicadores do restaurante indicado e autorizado. |
 | POST/GET | `/api/me/role-requests` | Criar/consultar solicitação de RESPONSAVEL. |
 | GET | `/api/admin/role-requests` | Listar solicitações para ADMIN. |
 | PATCH | `/api/admin/role-requests/{id}` | Aprovar/rejeitar solicitação. |
 | PATCH | `/api/admin/restaurants/{id}/responsible` | Transferir responsável, com auditoria. |
 | DELETE | `/api/admin/users/{userId}/roles/RESPONSAVEL` | Remover papel somente após transferências necessárias. |
 
-As rotas novas deste quadro são decisões de contrato para o MVP e devem ser refletidas no documento de API/OpenAPI. Não implementar endpoints adicionais além destes e dos já preservados sem registrar a necessidade.
+As rotas novas deste quadro são decisões de contrato para o MVP e devem ser refletidas no documento de API/OpenAPI. O endpoint de visualização é uma operação de escrita separada para preservar a semântica de `GET`. Não implementar endpoints adicionais além destes e dos já preservados sem registrar a necessidade.
 
 ## 4. Ajustes de modelo necessários
 

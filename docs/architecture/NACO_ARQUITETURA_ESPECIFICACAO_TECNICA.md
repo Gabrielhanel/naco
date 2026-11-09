@@ -2,11 +2,11 @@
 title: "NɅCO — Arquitetura de Software e Especificação Técnica"
 subtitle: "Documento mestre do sistema • MVP"
 author: "Documentação técnica do projeto NɅCO"
-date: "02 de novembro de 2026"
+date: "09 de novembro de 2026"
 lang: pt-BR
 ---
 
-> **Status documental:** versão consolidada para orientar o início da implementação. Este documento descreve decisões aprovadas, padrões técnicos do adendo e pendências que precisam de resolução antes do congelamento da API. Não é evidência de implementação, homologação ou prontidão para produção.
+> **Status documental:** versão consolidada para orientar o início da implementação. Requisitos e decisões complementares já aprovados foram propagados para este documento; os contratos definidos orientarão a futura OpenAPI. Não é evidência de implementação, homologação ou prontidão para produção.
 
 # Controle do documento
 
@@ -14,18 +14,18 @@ lang: pt-BR
 |---|---|
 | Sistema | NɅCO (pronúncia: NACO) |
 | Documento | Arquitetura de software e especificação técnica mestre |
-| Versão | 1.0 |
-| Data-base | 02/11/2026 |
+| Versão | 1.2 |
+| Data-base | 09/11/2026 |
 | Escopo | MVP mobile + web + API + persistência + operações |
 | Arquitetura | Monólito modular |
 | Repositório conhecido | `Gabrielhanel/naco` |
-| Fontes | Especificação consolidada, modelo de dados/API, registro QU-01–QU-73, auditoria documental e adendo de decisões complementares v1.0 |
+| Fontes | Especificação consolidada, modelo de dados/API, registro QU-01–QU-73, auditoria documental, adendo de decisões complementares e decisões Q63–Q103 de imagens |
 | Estado do software | Não declarado como implementado; este documento é planejamento/especificação |
 
 ## Convenções de leitura
 
 - **Aprovado:** requisito ou decisão expressamente registrada nas fontes do projeto.
-- **Padrão técnico adotado:** escolha de implementação fechada no adendo de 02/11/2026.
+- **Padrão técnico adotado:** escolhas de implementação fechadas no adendo de 02/11/2026 e nas decisões complementares Q63–Q103 de imagens, consolidadas em documento próprio.
 - **Recomendação de arquitetura:** orientação técnica para concretizar uma decisão, sem alterar regra de negócio.
 - **Pendência de contrato:** ponto que deve ser resolvido antes de publicar/finalizar a OpenAPI ou implementar a operação afetada.
 - **Fora do MVP:** capacidade explicitamente excluída do primeiro corte.
@@ -160,6 +160,8 @@ Se cancelamento ocorrer após confirmação, estado, evento e reposição do est
 
 ## 5.1 Cadastro, login e sessão
 
+Uma conta pode ter CLIENTE e RESPONSAVEL ao mesmo tempo. No MVP não há seletor de identidade/papel no login: mobile atende fluxos CLIENTE e web atende gestão RESPONSAVEL; cada endpoint valida papel e ownership no backend.
+
 1. Cliente envia nome, e-mail e senha ao cadastro público.
 2. API valida sintaxe, normaliza e-mail conforme política única, verifica unicidade e força da senha.
 3. Senha é derivada com Argon2id; nunca é persistida em texto puro.
@@ -229,12 +231,13 @@ Se cancelamento ocorrer após confirmação, estado, evento e reposição do est
 
 - `GET /api/restaurants/{restaurantId}/orders`: resumo para responsável do restaurante.
 - `GET /api/me/orders/inbox`: pedidos de todos os restaurantes geridos, com contadores por restaurante e global.
-- `GET /api/orders/{orderId}`: detalhe do pedido.
+- `GET /api/orders/{orderId}`: detalhe do pedido, sem mutação.
+- `POST /api/orders/{orderId}/views`: registra a primeira visualização por responsável; idempotente, preserva `first_viewed_at`.
 - Polling de 15 segundos, pausado quando tela não está visível; atualizar ao voltar.
 - Cada responsável possui estado próprio de leitura (`OrderView`), não compartilhado com outros responsáveis.
 - Pedidos encerrados saem do contador de não lidos, mas histórico de visualização permanece.
 
-**Conflito de semântica HTTP a resolver:** o adendo descreve `GET /api/orders/{orderId}` como consulta de detalhes e simultaneamente marca a leitura do pedido, gravando `OrderView`. Pela regra geral de que GET consulta sem mutação, essas duas responsabilidades conflitam. Recomendação para API freeze: GET permanece puro e a marcação é feita por endpoint explícito de escrita, por exemplo `POST /api/orders/{orderId}/views`, idempotente. Não implementar o efeito colateral em GET sem corrigir formalmente o contrato.
+A listagem e os detalhes são leituras puras. A visualização é registrada separadamente por `POST /api/orders/{orderId}/views`, evitando efeito colateral em GET.
 
 ## 5.8 Avaliação de produto
 
@@ -268,10 +271,12 @@ flowchart LR
   W --> API
   API --> PG[(PostgreSQL)]
   API <--> RD[(Redis)]
-  API --> IMG[Cloudinary via StoragePort]
+  API -->|upload/exclusão via StoragePort| CLD[Cloudinary: mídia + CDN]
+  M -->|GET de imagem| CLD
+  W -->|GET de imagem| CLD
 ```
 
-O mobile e o web não acessam banco nem Cloudinary diretamente. Toda regra de negócio passa pela API; credenciais e segredos ficam no backend/ambiente seguro.
+O mobile e o web não acessam o banco nem as APIs administrativas do Cloudinary. Eles recebem da API a URL pública versionada e carregam a imagem pela CDN gerenciada. Toda operação de upload, substituição ou exclusão passa pela API; `api_secret` fica exclusivamente no backend/ambiente seguro.
 
 ## 6.3 Diagrama de contêineres e responsabilidades
 
@@ -282,7 +287,7 @@ O mobile e o web não acessam banco nem Cloudinary diretamente. Toda regra de ne
 | API | Node.js 26 LTS, Express, TypeScript strict | Autenticação, autorização, validação, domínio, contratos e integração. |
 | Banco relacional | PostgreSQL | Fonte de verdade, constraints, transações, snapshots e auditoria. |
 | Cache/rate-limit | Redis | Cache-aside público, contadores e limites; não fonte de verdade. |
-| Armazenamento de imagens | Cloudinary através de abstração | Upload/entrega de imagens sem dependência de domínio ao fornecedor. |
+| Armazenamento de imagens | Cloudinary via `StoragePort` | Backend controla upload/processamento/exclusão; Cloudinary armazena e distribui imagens públicas. |
 | CI | GitHub Actions | Lint, typecheck, testes, build e verificação de migrations. |
 
 ## 6.4 Camadas internas
@@ -293,9 +298,9 @@ O mobile e o web não acessam banco nem Cloudinary diretamente. Toda regra de ne
 4. **Domain:** entidades/valores, invariantes, máquina de estados, cálculo monetário, normalização, políticas de autorização.
 5. **Repositories:** abstração de persistência; implementação Prisma; consultas específicas e transações.
 6. **Schemas/DTOs:** Zod para entrada e saída; contratos OpenAPI; mapeamento explícito camelCase ⇄ modelo relacional.
-7. **Infrastructure:** PostgreSQL/Prisma, Redis, Cloudinary, relógio, UUID, hashing, JWT, logging e tracing.
+7. **Infrastructure:** PostgreSQL/Prisma, Redis, Cloudinary (adapter `StoragePort`), relógio, UUID, hashing, JWT, logging e tracing.
 
-**Direção de dependência:** interface → aplicação → domínio; infraestrutura implementa portas definidas pelas camadas internas. O domínio não importa Express, Prisma, Redis ou SDK do Cloudinary.
+**Direção de dependência:** interface → aplicação → domínio; infraestrutura implementa portas definidas pelas camadas internas. O domínio não importa Express, Prisma, Redis nem SDK do Cloudinary.
 
 ## 6.5 Módulos de domínio
 
@@ -357,7 +362,7 @@ Dentro de cada módulo da API, manter `domain`, `application`, `infrastructure`,
 | Web | React + TypeScript + Axios | Painel do responsável e administração. |
 | Validação | Zod | Validar input no limite HTTP; validar invariantes no domínio. |
 | Contratos | OpenAPI | Fonte publicada dos paths, schemas, autenticação, erros e exemplos. |
-| Imagens | Cloudinary atrás de StoragePort | Domínio não acopla ao SDK; validar MIME, dimensão e tamanho. |
+| Imagens | Cloudinary atrás de `StoragePort` | Fornecedor aprovado para MVP; pipeline, exclusão best effort e operações persistentes definidos em `05_ARMAZENAMENTO_E_PROCESSAMENTO_DE_IMAGENS.md`. |
 | Testes | Vitest, Supertest, React Testing Library, Appium, k6 | Unitário, API, UI, mobile E2E e carga. |
 | Dev local | Docker Compose | PostgreSQL e Redis; seeds somente para desenvolvimento/testes. |
 | CI | GitHub Actions | lint, typecheck, unit, integration, migrations, build, security checks. |
@@ -373,7 +378,11 @@ Dentro de cada módulo da API, manter `domain`, `application`, `infrastructure`,
 
 ## 7.2 Armazenamento de imagens
 
-Criar interface `StoragePort` (`upload`, `delete`, `getPublicUrl` ou equivalentes), com implementação Cloudinary. Validar extensão/MIME real, tamanho máximo, dimensões e autorização de upload. Não aceitar URL arbitrária como prova de arquivo seguro. Remoção de imagem deve respeitar referências em uso e ser resiliente a falhas externas.
+Criar interface `StoragePort` (`upload`, `delete`, `getPublicUrl`, `getUsage`) com adapter Cloudinary. O backend é o único componente com credenciais administrativas e controla upload, substituição e exclusão. Persistir chave lógica, `asset_id`, `public_id` e `version`; o adapter gera URL versionada. Segredos ficam em configuração segura, nunca no cliente. Cloudinary foi escolhido para o MVP no plano Free sem cartão.
+
+O upload aceita JPEG/PNG/WebP estáticos, até 5 MB e 40 MP, com validação de extensão, MIME, magic bytes e decodificação. O pipeline remove EXIF, converte para sRGB, preserva transparência, limita a imagem a 1600×1600 sem upscale e gera WebP com qualidade configurável. A imagem anterior só é substituída após upload concluído e atualização condicional. Cada chave é imutável e única por operação; URLs de mídia usam public IDs e versões imutáveis; não assumir TTL de um ano no CDN padrão do Cloudinary.
+
+Upload, eventos append-only, reconciliação e exclusão são operações persistidas. No Cloudinary, `destroy` com `invalidate=true` solicita exclusão e invalidação na mesma chamada; a resposta não comprova a propagação global do purge e não há polling padrão por ID. URLs versionadas, `public_id` imutável, retries transitórios e reconciliação da existência do asset seguem `05_ARMAZENAMENTO_E_PROCESSAMENTO_DE_IMAGENS.md`. O monitoramento interno bloqueia novos uploads ao atingir o limiar configurado; nenhuma cobrança/upgrade é permitido sem autorização.
 
 # 8. Modelo de domínio e persistência
 
@@ -388,13 +397,16 @@ Criar interface `StoragePort` (`upload`, `delete`, `getPublicUrl` ou equivalente
 | `Restaurant` | Estabelecimento | responsável, nomes, CNPJ único, contato/endereço, cozinha, timezone, opening_hours, logo/cover, publication_status. |
 | `ProductBase` | Identidade compartilhável de produto | id, name, description, timestamps. |
 | `Category` | Categoria própria do restaurante | id, restaurant_id, name, description, display_order, status. |
-| `RestaurantProduct` | Oferta comercial específica | id, restaurant_id, product_base_id, category_id, display_name, normalized_name, price, stock_quantity, image, status, timestamps. |
+| `RestaurantProduct` | Oferta comercial específica | id, restaurant_id, product_base_id, category_id, display_name, normalized_name, price, stock_quantity, `storage_key` opcional, `provider_asset_id`, `provider_public_id`, `provider_version`, status, timestamps. |
 | `Order` | Pedido simulado | id, customer_id, restaurant_id, status, total, delivery address/name/email snapshots, timestamps. |
 | `OrderItem` | Linha histórica | id, order_id, restaurant_product_id, product_name snapshot, unit_price, quantity, subtotal. |
 | `OrderEvent` | Histórico de transição | id, order_id, previous_status, new_status, changed_by, created_at. |
 | `OrderView` | Primeiro acesso do responsável | order_id, responsible_user_id, first_viewed_at; unique composto. |
 | `Review` | Avaliação de produto | id, order_item_id único, rating, comment, timestamps. |
 | `IdempotencyRecord` | Estado da intenção de checkout | user_id, key, payload_hash, processing/result state, HTTP result, order reference, expiry/tombstone timestamps. |
+| `StorageUploadOperation` | Operação persistente de upload | id, restaurant_product_id, storage_key, provider_asset_id, provider_public_id, provider_version, estado, timestamps e dados de tentativas/reconciliação. |
+| `StorageUploadOperationEvent` | Histórico de upload | id, upload_operation_id, event_type, details JSONB, actor_type/actor_user_id, process_instance_id, created_at; append-only. |
+| `StorageDeletionOperation` | Exclusão/invalidação best effort de asset Cloudinary | storage_key único, asset_id/public_id, tentativas, resposta do provider e reconciliação da existência do asset. |
 
 `RoleRequest`, `RoleAuditEvent` e `IdempotencyRecord` têm necessidade funcional e campos lógicos definidos no adendo; o schema físico final, constraints, índices e migrações ainda precisam ser consolidados. `OrderView` também precisa de schema físico.
 
@@ -508,11 +520,13 @@ Usar update condicional ou lock transacional para garantir que duas requisiçõe
 - `GET /api/orders/idempotency/{key}` verifica usuário dono; desconhecida/outro usuário = 404; tombstone próprio expirado = 410; processing/concluída = 200.
 - Falha antes de commit reverte registro, pedido e itens integralmente.
 
-## 9.5 Compatibilização QU-60
+## 9.5 Compatibilização QU-60 — resolução consolidada
 
-A atomicidade aprovada deve ser lida como duas fronteiras:
-- **Criação:** registro idempotente + Order + OrderItems, sem alteração de estoque.
-- **Confirmação/cancelamento:** estoque + status + OrderEvent, com baixa ou reposição atômica.
+A QU-60 está resolvida pelo adendo complementar, sem alterar a regra funcional de estoque. A atomicidade tem duas fronteiras:
+- **Criação:** registro idempotente + Order + OrderItems, na mesma transação, sem reservar ou alterar estoque.
+- **Confirmação/cancelamento:** estoque + status + OrderEvent, com baixa ou reposição atômica na mesma transação.
+
+A criação não reduz estoque; a confirmação revalida disponibilidade e debita; cancelamento elegível após confirmação restaura somente uma vez.
 
 Não antecipar débito de estoque para criação. Testar falhas antes/depois do commit e repetição de chave para provar ausência de duplicidade.
 
@@ -554,17 +568,21 @@ Não antecipar débito de estoque para criação. Testar falhas antes/depois do 
 | GET | `/api/restaurants/{restaurantId}/orders` | Responsável do restaurante | Lista de pedidos. |
 | GET | `/api/me/orders/inbox` | RESPONSAVEL | Inbox consolidada. |
 | GET | `/api/orders/{orderId}` | Titular/ator autorizado | Detalhes e eventos. |
+| POST | `/api/orders/{orderId}/views` | Responsável autorizado | Registrar primeira visualização; idempotente por pedido/responsável. |
 | PATCH | `/api/orders/{orderId}/status` | Ator autorizado | Único contrato de transição. |
 | GET | `/api/orders/idempotency/{key}` | Titular da chave | Consultar estado idempotente. |
+| GET | `/api/admin/storage/upload-operations` | ADMIN | Listar operações de upload com filtros por estado/período. |
+| GET | `/api/admin/storage/upload-operations/{id}` | ADMIN | Consultar detalhes e histórico de uma operação de upload. |
 | POST | `/api/order-items/{orderItemId}/reviews` | Cliente dono do pedido | Avaliar produto após CONCLUIDO. |
-| GET | `/api/restaurant/dashboard` | Responsável autorizado | Indicadores. |
+| GET | `/api/products/{productId}/reviews` | Público, sem autenticação | Consultar avaliações públicas paginadas; autor exibido como “Cliente verificado”. |
+| GET | `/api/restaurant/dashboard?restaurantId={restaurantId}` | Responsável autorizado | Indicadores do restaurante explicitamente indicado; ownership validado. |
 | POST/GET | `/api/me/role-requests` | Autenticado | Criar/listar solicitações próprias. |
 | GET | `/api/admin/role-requests?status=PENDING` | ADMIN | Listar solicitações. |
 | PATCH | `/api/admin/role-requests/{id}` | ADMIN | Aprovar/rejeitar. |
 | PATCH | `/api/admin/restaurants/{id}/responsible` | ADMIN | Transferir responsável. |
 | DELETE | `/api/admin/users/{userId}/roles/RESPONSAVEL` | ADMIN | Remover papel após transferências. |
 
-**Rota a compatibilizar:** `GET /api/orders/{orderId}/views` ou `POST /api/orders/{orderId}/views` não deve ser adicionada definitivamente sem acertar a semântica de leitura. Recomendação é `POST` para registrar visualização e `GET` puro para detalhe.
+A visualização é uma escrita explícita em `POST /api/orders/{orderId}/views`; `GET /api/orders/{orderId}` permanece uma leitura pura. O `POST` preserva o primeiro `first_viewed_at` por responsável.
 
 ## 10.3 Exemplo de criação de pedido
 
@@ -665,6 +683,8 @@ Resolver antes da API freeze os códigos legados divergentes e padronizar `error
 - Geral: 120 req/min por usuário autenticado; limites separados para ações sensíveis.
 - Redis sliding window/token bucket; 429 e Retry-After.
 - CORS limitado a origens conhecidas, TLS, Helmet, CSP, validação Zod, queries parametrizadas, upload limitado, secret scanning e dependency checks no CI.
+- Upload de imagem: somente backend acessa o bucket; validar extensão, MIME, magic bytes, decodificação, 5 MB, 40 MP e formato estático; não aceitar URL arbitrária como prova de arquivo seguro.
+- Remover EXIF, normalizar para sRGB/WebP e não expor credenciais/URLs assinadas; arquivos temporários devem ser limpos e a concorrência de conversões limitada.
 
 ## 11.5 Dados que não podem ir aos logs
 
@@ -723,6 +743,7 @@ Senha, access token, refresh token, Idempotency-Key completa, endereço completo
 
 - Logs estruturados com requestId/correlationId.
 - Métricas de latência, taxa de requisição, erro, CPU, RAM, conexões DB, Redis/cache, fila interna se existir e falhas externas.
+- Pipeline de imagens: sucesso/falha, duração, retries, volume processado, consumo de recursos e operações problemáticas; eventos de upload append-only e operações de exclusão/invalidação best effort do Cloudinary persistidas.
 - Tracing OpenTelemetry para requisição e chamadas ao banco.
 - Alertas iniciais: erro técnico >1% por 5 min; P95 acima do limite por 5 min; banco/Redis indisponível; backup falhou.
 - Logs técnicos 90 dias; trilha administrativa 24 meses, sujeita à revisão de privacidade.
@@ -860,8 +881,8 @@ Guardar versão de código, commit, configuração, hardware/infra, dataset, scr
 | Risco | Impacto | Mitigação/teste |
 |---|---|---|
 | Conflito de leitura OrderView e GET puro | Efeito colateral em método de consulta | Separar POST de visualização; teste de idempotência; corrigir OpenAPI. |
-| Ambiguidade conta/seleção de papel | Login, UX e modelo de autorização inconsistentes | Resolver SINGLE account vs seleção de conta/identidade após login antes da API freeze. |
-| Dashboard em múltiplos restaurantes | Consulta sem contexto de escopo | Definir seleção/contexto de restaurante no endpoint preservado. |
+| Conta com papéis múltiplos em clientes distintos | UX pode confundir qual área está disponível | Não duplicar conta nem introduzir seletor de identidade no login; mobile exige CLIENTE, web exige RESPONSAVEL, e backend valida papel/ownership em cada operação. Cobrir guards na implementação. |
+| Dashboard para responsável com vários restaurantes | Interface pode exibir métricas do restaurante errado | `restaurantId` obrigatório no endpoint; UI deve selecionar explicitamente o restaurante e validar ownership no backend. |
 | Concorrência de estoque | Sob venda ou débito duplicado | Lock ordenado, update condicional, transação e teste concorrente no PostgreSQL. |
 | Retry de checkout | Pedido duplicado | Idempotency-Key persistente e consulta após timeout. |
 | Redis indisponível | Rate limit/cache inconsistente | Definir fail-closed/degraded por endpoint e testar falha. |
@@ -871,31 +892,54 @@ Guardar versão de código, commit, configuração, hardware/infra, dataset, scr
 | Segredo/PII em logs | Exposição de dados | Sanitização estruturada, testes de logs e secret scanning. |
 | RNF-01 sem ambiente representativo | Conclusão inválida de desempenho | Documentar ambiente/dataset, repetir execuções e não extrapolar resultados. |
 
-# 18. Pendências para congelamento da API e decisões operacionais
+# 18. Itens remanescentes para contrato, implementação e operação
 
-Os itens abaixo não devem ser silenciosamente inferidos. São gates de fechamento contratual.
+As decisões de produto e arquitetura do MVP foram consolidadas no adendo `NACO_DECISOES_COMPLEMENTARES_MVP.md` versão 1.2 e propagadas nos documentos-base. Os itens desta seção são tarefas de materialização ou definições residuais; não reabrem escolhas já aprovadas.
 
-| ID | Pendência | Recomendação técnica / próximo passo | Severidade |
+## 18.1. Contratos que ainda precisam de detalhamento antes do freeze da OpenAPI
+
+| ID | Item | Situação / ação | Gate |
 |---|---|---|---|
-| P-01 | `GET /api/orders/{id}` grava `OrderView` apesar de GET dever ser leitura | Separar leitura e marcação com POST idempotente; alterar contrato formalmente. | Bloqueia API freeze de pedidos |
-| P-02 | Divergência entre conta única com papéis compostos e fluxo histórico de escolher conta/tipo após login | Confirmar o modelo único aprovado que o frontend deve representar; não criar segunda conta sem decisão. | Bloqueia auth/API freeze |
-| P-03 | Preservação de `GET /api/restaurant/dashboard` com múltiplos restaurantes | Definir seleção explícita por restaurantId ou contexto inequívoco; preservar autorização server-side. | Bloqueia DTO dashboard |
-| P-04 | Matriz de cancelamento está aprovada, mas deve constar integralmente na OpenAPI/docs de casos | Criar tabela de transição e testes por ator/estado. | Bloqueia status API |
-| P-05 | Overlap de horários que cruza meia-noite e dia seguinte | Validador de intervalos por linha temporal semanal; teste adjacente. | Bloqueia horário |
-| P-06 | Política quando Redis cair | Definir fail-closed/degraded/fallback para rate limit/cache sem bypass silencioso. | Bloqueia produção |
-| P-07 | Append-only de auditoria | Reforçar permissão de banco/trigger além da convenção de aplicação. | Bloqueia segurança admin |
-| P-08 | Códigos HTTP e envelope legado divergentes | Unificar 400/422, 403/404 e error.code simbólico no OpenAPI. | Bloqueia API freeze |
-| P-09 | Persistência física de RoleRequest, RoleAuditEvent, IdempotencyRecord, OrderView | Consolidar tipos, constraints, índices, retenção e migrations. | Bloqueia migrations respectivas |
-| P-10 | Endpoint da marcação de visualização | Definir método/rota após P-01. | Bloqueia inbox |
-| P-11 | Admin: autorização prévia externa para ações sensíveis | Documentar procedimento operacional e evidência de autorização. | Bloqueia ações privilegiadas respectivas |
-| P-12 | Categoria: rota pública/gestão não está explicitada na tabela final de rotas | Definir se categorias são geridas via rotas próprias ou incluídas nas operações de produto; não inventar endpoint. | Bloqueia contratos catálogo |
+| C-01 | Rotas e DTOs de categorias | Definir consulta/gestão com ownership por restaurante; domínio e vínculo já definidos. | API de catálogo |
+| C-02 | Upload de imagem do responsável | Definir path, request/response e limite/erros; Cloudinary/StoragePort já escolhidos. | API de mídia |
+| C-03 | Reprocessamento administrativo de exclusão Cloudinary | Definir procedimento e eventual contrato privado; Q77–Q86 já adaptadas. | Operação de mídia |
+| C-04 | Dashboard multi-restaurante | `restaurantId` obrigatório em `GET /api/restaurant/dashboard`; detalhar filtros e DTO agregado. | API de dashboard |
+| C-05 | Visualização de pedidos | `POST /api/orders/{orderId}/views` já escolhido; detalhar schema de resposta e erros. | API de pedidos |
+| C-06 | Filtros admin de mídia | Registrar nomes, tipos e paginação da lista de operações. | API admin |
 
-## 18.1 Decisões que não bloqueiam o início técnico
+## 18.2. Materialização de schema e implementação — trabalho futuro esperado
 
-- Executar 130 runs RNF-01 (gate de homologação, não pré-requisito de criação do repositório).
-- Rever SLO/RPO/RTO e retenções antes de produção.
-- Refinar detalhes visuais sem alterar contrato de domínio.
-- Implementar feriados/exceções, carrinho server-side, WebSocket/SSE, push, pagamento e entrega reais (fora do MVP).
+- Schema Prisma/PostgreSQL e migrations para as entidades lógicas aprovadas (`RoleRequest`, `RoleAuditEvent`, `OrderView`, `IdempotencyRecord`, operações de mídia e demais entidades de domínio).
+- Constraints e índices físicos: ADMIN único/exclusivo; uma `RoleRequest` PENDING por usuário; unicidade de oferta por `(restaurant_id, normalized_name)`; `OrderView` por `(order_id, responsible_user_id)`; integrity entre oferta/categoria.
+- Implementação de backend, mobile, web, Cloudinary, Redis, observabilidade e CI/CD conforme a stack decidida.
+- Criar `docs/api/openapi.yaml` com base nos contratos já definidos. O arquivo ainda não integra o ZIP porque está previsto para a etapa de desenvolvimento; sua ausência não significa que os requisitos/rotas principais não tenham decisão.
+
+## 18.3. Validações operacionais antes de staging/produção
+
+- Implementar guards de navegação por papel nos clientes e seletor de restaurante no dashboard para responsáveis com múltiplos estabelecimentos. A conta não troca de identidade/papel no login.
+- Definir comportamento fail-safe/degraded quando Redis indisponível para cache e rate limiting, sem bypass silencioso de controles de segurança.
+- Documentar evidência e procedimento externo de autorização do proprietário para ações ADMIN sujeitas a autorização prévia.
+- Definir moderação/denúncia e retenção de avaliações públicas antes da abertura irrestrita de publicação; a consulta pública sem login e o rótulo “Cliente verificado” já estão aprovados.
+- Cloudinary: validar a implementação de monitoramento de créditos com dados atualizados periodicamente; cachear consultas, respeitar limites da Admin API e bloquear novos uploads preventivamente. O patamar de 90% é uma salvaguarda técnica recomendada/configurável, não altera a decisão de bloquear no limite e não interrompe entrega das imagens existentes.
+- Revalidar SLO/RPO/RTO, backups, retenção, métricas e alertas após o primeiro staging.
+- Executar os 130 testes RNF-01, cenários de segurança, integração, concorrência, recuperação e homologação; registrar resultados reais.
+
+A ausência de OpenAPI, schema físico, migrations, código e resultados de teste é compatível com o estágio de preparação do projeto. Não declara software implementado nem constitui inconsistência documental.
+
+## 18.4. Decisões fechadas que não devem voltar à lista de pendências
+
+- Uma conta por pessoa; papéis CLIENTE/RESPONSAVEL coexistem; ADMIN é único e exclusivo; sem seletor de identidade no login, pois mobile/web são superfícies por papel e o backend valida autorização.
+- `RoleRequest`, `RoleAuditEvent`, no máximo uma solicitação PENDING por usuário e transferência de todos os restaurantes antes de remover RESPONSAVEL.
+- Horários semanais com timezone IANA e intervalos `HH:mm`; feriados/exceções fora do MVP.
+- BRL, `DECIMAL(12,2)` e strings decimais na API.
+- `display_name`/`normalized_name` e unicidade normalizada por restaurante.
+- Access JWT 15 min, refresh opaco rotativo até 30 dias, revogação e armazenamento seguro por plataforma.
+- Carrinho local; métricas do dashboard e período já definidos.
+- OpenAPI conventions: `camelCase`, `status`, envelope simbólico, códigos HTTP definidos no adendo.
+- Avaliação PRODUCT_ONLY, leitura pública; rotas de review de produto aprovadas.
+- GET pedidos são puros; POST view registra visualização; PATCH status altera estado.
+- QU-60 resolvida em duas fronteiras transacionais; estoque só baixa na confirmação.
+- Cloudinary Free via `StoragePort`, sem cartão/cobrança sem autorização; Q77–Q86 adaptadas para exclusão/invalidação best effort.
 
 # 19. Estratégia de implementação por fatias verticais
 
@@ -994,6 +1038,7 @@ Os apêndices a seguir preservam o detalhamento operacional originalmente aprova
 - Pedido deve estar em `CONCLUIDO`.
 - Nota deve estar entre 1 e 5; comentário pode estar ausente.
 - Uma segunda avaliação para o mesmo `order_item_id` deve ser rejeitada.
+- Visitante sem autenticação consulta avaliações públicas paginadas por produto; autor aparece como “Cliente verificado”, sem dados pessoais.
 - Avaliação não armazena cópia redundante de customer/order/restaurant; vínculo é obtido por relações.
 
 ### Critérios 3. RF-03 — Pedido demonstrativo
@@ -1021,7 +1066,7 @@ Os apêndices a seguir preservam o detalhamento operacional originalmente aprova
 - Produto referenciado por pedido não pode ter histórico invalidado.
 - Alterar nome/preço não modifica snapshots antigos.
 - Oferta só usa categoria do mesmo restaurante.
-- Duplicidade de nome deve ser testada conforme normalização ainda pendente.
+- Duplicidade de nome é validada por `normalized_name` calculado no servidor e unicidade `(restaurant_id, normalized_name)`, inclusive para ofertas desativadas.
 
 ### Critérios 6. RF-06/RF-07 — Papéis e restaurantes
 
@@ -1045,7 +1090,7 @@ Os apêndices a seguir preservam o detalhamento operacional originalmente aprova
 
 - Diante de falha de comunicação, a interface exibe mensagem compreensível.
 - A interface não mostra sucesso quando a operação não foi confirmada.
-- Retry detalhado permanece pendente e não pode ser automatizado para criação de pedido sem considerar idempotência.
+- Retry automático é limitado a falhas transitórias/operações seguras; criação de pedido repete a mesma intenção com a mesma `Idempotency-Key`, sem gerar nova chave.
 
 ## 8. Cenários de teste relacionados
 
@@ -1133,9 +1178,9 @@ Executar os 30 testes oficiais, 60 execuções adicionais de overhead e 40 execu
 | RF-01 | `User`, `UserRole` | Conta única e autenticação são pré-condição para fluxos protegidos. |
 | RF-02 | RF-01, RF-03; `Order`, `OrderItem`, `Review` | Avaliação exige cliente autenticado, pedido próprio concluído e item comprado. |
 | RF-03 | RF-01, RF-07, RF-08; catálogo, horários, publicação, `Order`, `OrderItem`, `OrderEvent` | Pedido depende de cliente, restaurante válido, ofertas e disponibilidade. |
-| RF-04 | RF-07, RF-08; `Restaurant`, `Order`, `OrderItem`, `Review` | Painel depende de dados de restaurante, pedidos e avaliações; definição de métricas pendente. |
+| RF-04 | RF-07, RF-08; `Restaurant`, `Order`, `OrderItem`, `Review` | Painel depende de dados de restaurante, pedidos e avaliações; fórmulas e janela temporal definidas no adendo complementar. |
 | RF-05 | RF-06, RF-07; `ProductBase`, `RestaurantProduct`, `Category` | Gestão de produtos depende de papel RESPONSAVEL e ownership do restaurante. |
-| RF-06 | RF-01; `UserRole` e fluxo de solicitação/auditoria | Atribuição de RESPONSAVEL depende de aprovação administrativa; múltiplas solicitações pendentes não está decidido. |
+| RF-06 | RF-01; `UserRole` e fluxo de solicitação/auditoria | Atribuição de RESPONSAVEL depende de aprovação administrativa; `RoleRequest` limita a uma solicitação PENDING por usuário e registra auditoria em `RoleAuditEvent`. |
 | RF-07 | RF-06; `User`, `UserRole`, `Restaurant`, `Order` | Gestão de restaurante depende de papel e associação do responsável. |
 | RF-08 | RF-03; `RestaurantProduct`, `Order`, `OrderItem`, `OrderEvent` | Estoque/preço participam da validação do pedido e das transições de confirmação/cancelamento. |
 | RF-09 | RF-05, RF-08; `ProductBase`, `RestaurantProduct`, `Category`, `OrderItem` | Alterações de catálogo não podem reescrever snapshots. |
@@ -1147,48 +1192,31 @@ Executar os 30 testes oficiais, 60 execuções adicionais de overhead e 40 execu
 | Requisito | Regras principais | Entidades | Endpoints documentados/relacionados | Testes principais |
 |---|---|---|---|---|
 | RF-01 | RN-04 e regras de conta/papéis | `User`, `UserRole` | `POST /api/auth/register`; `POST /api/auth/login`; `POST /api/auth/logout` | Cadastro, e-mail único, login, logout, papéis e ciclo de sessão. |
-| RF-02 | RN-05 | `Review`, `OrderItem`, `Order`, `User` | `POST /api/restaurants/:id/reviews` é rota original, mas seu contrato conflita com produto-only; não redefinir sem aprovação | Elegibilidade, pedido concluído, ownership, nota, unicidade e contrato de rota. |
-| RF-03 | RN-01, RN-06, RN-07, RN-08, RN-09; cancelamento/idempotência | `Order`, `OrderItem`, `OrderEvent`, `Restaurant`, `RestaurantProduct` | `POST /api/orders/create`; `GET /api/orders/`; rota de pedidos recebidos permanece inconsistente | Criação, snapshots, transições, cancelamento, estoque, idempotência e falhas. |
-| RF-04 | Permissões de responsável/admin | `Restaurant`, `Order`, `OrderItem`, `Review`, `RestaurantProduct` | `GET /api/restaurant/dashboard` | Escopo autorizado e reconciliação de indicadores; fórmulas pendentes. |
+| RF-02 | RN-05 | `Review`, `OrderItem`, `Order`, `User` | `POST /api/order-items/{orderItemId}/reviews`; `GET /api/products/{productId}/reviews` público | Elegibilidade, pedido concluído, ownership, nota, unicidade, leitura pública e privacidade do autor. |
+| RF-03 | RN-01, RN-06, RN-07, RN-08, RN-09; cancelamento/idempotência | `Order`, `OrderItem`, `OrderEvent`, `Restaurant`, `RestaurantProduct` | `POST /api/orders/create`; GET pedidos/inbox/detalhes; `POST /api/orders/{id}/views`; `PATCH /api/orders/{id}/status` | Criação, snapshots, transições, cancelamento, estoque, idempotência e falhas. |
+| RF-04 | Permissões de responsável/admin | `Restaurant`, `Order`, `OrderItem`, `Review`, `RestaurantProduct` | `GET /api/restaurant/dashboard?restaurantId={restaurantId}` | Escopo autorizado; produtos vendidos e avaliações recebidas com fórmulas e períodos definidos. |
 | RF-05 | RN-02, RN-03, RN-06, RN-07 | `ProductBase`, `RestaurantProduct`, `Category`, `OrderItem` | `POST /api/restaurants/:id/products`; `PATCH /api/products/:id`; `DELETE /api/products/:id` | CRUD, ownership, duplicidade, estoque zero, histórico. |
-| RF-06 | Conta SINGLE, CLIENTE automático, RESPONSAVEL request/approval, ADMIN exclusivo | `User`, `UserRole`; estrutura de solicitação/auditoria pendente | Rotas públicas existentes não definem endpoints de solicitação/aprovação/remoção | Cadastro de papel, aprovação, rejeição, cooldown, exclusividade e auditoria. |
+| RF-06 | Conta SINGLE, CLIENTE automático, RESPONSAVEL request/approval, ADMIN exclusivo | `User`, `UserRole`, `RoleRequest`, `RoleAuditEvent` | `/api/me/role-requests`; `/api/admin/role-requests`; transferência e remoção admin | Cadastro de papel, aprovação, rejeição, cooldown, exclusividade e auditoria. |
 | RF-07 | Responsável único por restaurante, vários restaurantes por responsável; publicação | `User`, `UserRole`, `Restaurant`, `Order` | Endpoints de gerenciamento listados na seção API | Criação, listagem, gestão, publicação, despublicação, pedidos ativos. |
-| RF-08 | RN-06, RN-08; estoque na confirmação/estorno no cancelamento | `RestaurantProduct`, `Order`, `OrderItem`, `OrderEvent` | Rotas de produto; `POST /api/orders/create`; rota de transição de pedido não está formalizada | Estoque não negativo, disputa, baixa/restauração atômicas. |
+| RF-08 | RN-06, RN-08; estoque na confirmação/estorno no cancelamento | `RestaurantProduct`, `Order`, `OrderItem`, `OrderEvent` | Rotas de produto; `POST /api/orders/create`; `PATCH /api/orders/{id}/status` | Estoque não negativo, disputa, baixa/restauração atômicas. |
 | RF-09 | RN-02, RN-03, RN-07 | `ProductBase`, `RestaurantProduct`, `Category`, `OrderItem` | `PATCH /api/products/:id`; rotas de produto | Atualização, categoria no mesmo restaurante, snapshots. |
 | RNF-01 | QU-01 a QU-73 | Todas as entidades envolvidas nos cenários | Nove operações da QU-01; endpoint idempotência aprovado | 30 carga + 60 overhead + 40 concorrência, recuperação e reconciliação. |
-| RNF-02 | Tratamento de falhas | API, frontend, sessão | Endpoints de API via Axios | Mensagem compreensível, sem falso sucesso; retry detalhado pendente. |
+| RNF-02 | Tratamento de falhas | API, frontend, sessão | Endpoints via Axios e política de retry do adendo | Retry/backoff e regras de repetição segura definidos; validar implementação/testes. |
 
-## 11. Pendências que continuam abertas
+## 11. Itens ainda a materializar (estado consolidado)
 
-A lista completa e a justificativa aparecem no relatório de auditoria. Resumo:
+As decisões de domínio citadas nesta matriz foram fechadas no adendo complementar v1.2 e nos capítulos 5–10 deste documento. Esta lista não reabre essas decisões.
 
-1. **Rota de pedidos recebidos:** `GET /api/restaurants/:restaurantId/orders` indica “Cliente proprietário”, embora a finalidade seja recebimento/aceitação pelo restaurante. Ator, finalidade e método necessitam confirmação.
-2. **Avaliação versus endpoint:** o escopo aprovado é produto-only, mas a rota original `/api/restaurants/:id/reviews` sugere avaliação de restaurante. A rota não será renomeada ou recontratada sem aprovação.
-3. **Horários:** estrutura de `opening_hours`, fuso, virada de dia, exceções e horários especiais.
-4. **Nomes de produto:** normalização e entidade/constraint que garantirá RN-02.
-5. **Valores monetários:** precisão, moeda, escala e arredondamento.
-6. **JWT/sessão:** expiração, refresh, revogação, logout e armazenamento persistente.
-7. **Segurança:** política de senha, parâmetros de hash, limites de tentativas/rate limiting e privacidade/retenção.
-8. **ADMIN:** procedimento de autorização prévia na matriz e limites operacionais detalhados.
-9. **Solicitações RESPONSAVEL:** múltiplas solicitações pendentes, auditoria da criação e modelo/persistência do pedido.
-10. **Perda do papel RESPONSAVEL:** destino operacional dos restaurantes; dados não serão apagados automaticamente.
-11. **DTO/modelo:** `situation` versus `status`; `productId` versus `restaurant_product_id`; `price` versus `unit_price`.
-12. **Erros da API:** padronização de 400/422, 403/404 e forma/código de `error.code`.
-13. **Carrinho:** persistência, cálculo, atualização e endpoint/contrato para RN-09.
-14. **Perfil:** campos que o usuário pode alterar e endpoint correspondente a RN-04.
-15. **Painel:** indicadores, fórmula, período, filtros, paginação e contrato.
-16. **Idempotência:** status/body de chave ausente, inexistente/expirada e acesso a chave de outro usuário; formato detalhado do 202 e resposta de consulta; classificação do 409 de payload diferente no relatório de erros.
-17. **Atomicidade QU-60:** esclarecer a fronteira entre registro idempotente/criação do pedido e estoque, já que a regra aprovada reduz estoque somente na confirmação.
-18. **Modelo físico:** estratégia de índices e constraints físicas para integridade entre restaurante, categoria e oferta; schema de registros idempotentes, solicitações e auditoria.
-19. **RNF-02:** classes de falha, retry/backoff, limites e política de repetição segura.
-20. **Operação:** disponibilidade/SLA, backups, retenção, recuperação fora dos testes RNF-01, observabilidade operacional e RPO/RTO.
-21. **Qualidade:** critérios de entrada/saída, cobertura, política de regressão e gates de publicação.
-22. **Acessibilidade:** decidir se haverá requisito e critérios.
-23. **Tecnologias:** a documentação original trata a tabela de stack como opções/exemplos; decisões definitivas por componente precisam ser formalizadas quando aplicável.
-24. **Governança e prioridade:** versão/responsável/status formal e prioridade individual dos requisitos, se desejados.
-25. **Disponibilidade do serviço:** nenhum objetivo mensurável ou janela de manutenção foi aprovada.
+1. Criar `docs/api/openapi.yaml` a partir dos contratos orientadores; artefato planejado para a etapa de desenvolvimento.
+2. Definir contratos de categoria, upload de imagem pelo responsável e operação administrativa de reprocessamento Cloudinary antes de implementar essas operações.
+3. Materializar schema Prisma/PostgreSQL, constraints, índices e migrations das entidades lógicas já descritas.
+4. Documentar e implementar moderação/denúncia e retenção de avaliações públicas, sem mudar sua leitura pública aprovada.
+5. Definir comportamento fail-safe quando Redis estiver indisponível para rate limiting/cache.
+6. Finalizar parâmetros operacionais (limites WebP, timeout/CPU/memória, consulta/cache da Usage API Cloudinary, alarmes e procedimento de autorização externa de ações ADMIN).
+7. Executar a bateria de testes, campanhas RNF-01, testes de segurança, recuperação, carga e homologação. Nenhum resultado é antecipado neste pacote.
+8. Ajustar SLO/RPO/RTO e política operacional após o primeiro staging, usando os baselines aprovados até lá.
 
-Nenhuma pendência acima deve ser resolvida por inferência nesta revisão.
+A ausência da OpenAPI, schema físico, migrations, código e resultados executados é compatível com o estágio de preparação do projeto; não constitui pendência de decisão de produto nem evidência de implementação.
 
 
 ## Apêndice B — Registro integral das decisões QU-01 a QU-73
@@ -1281,7 +1309,7 @@ Nenhuma pendência acima deve ser resolvida por inferência nesta revisão.
 | QU-57 | Normalizar payload, ordenar itens deterministicamente e calcular hash dos campos relevantes. |
 | QU-58 | Considerar restaurante, produtos, quantidades e demais campos que efetivamente alterem o pedido; ignorar formatação irrelevante. Lista exata de campos permanece para contrato/schema. |
 | QU-59 | Persistir chave, usuário, hash do payload, estado do processamento e referência/resultado do pedido. |
-| QU-60 | Garantir atomicidade do registro idempotente, criação do pedido e operações relacionadas ao estoque. **Ressalva:** a fronteira transacional com estoque precisa de aprovação, pois a regra funcional anterior determina baixa apenas na confirmação, não na criação. |
+| QU-60 | Garantir atomicidade do registro idempotente, criação do pedido e operações relacionadas ao estoque. **Nota histórica:** a ressalva foi resolvida depois pelo adendo complementar v1.2 em duas fronteiras transacionais; estoque baixa apenas na confirmação. |
 | QU-61 | Diferenciar internamente chave inexistente, expirada, pertencente a outro usuário e operação em processamento, sem expor informações indevidas. |
 | QU-62 | Para mesma chave concorrente, garantir processamento único; demais requisições recuperam o mesmo resultado ou estado. |
 

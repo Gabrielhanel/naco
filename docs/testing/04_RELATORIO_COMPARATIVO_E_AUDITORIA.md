@@ -1,134 +1,97 @@
-# NɅCO — Relatório comparativo e auditoria documental
+# NɅCO — Auditoria documental pós-consolidação
 
-## 1. Escopo e fontes comparadas
+**Versão:** 1.3  
+**Data-base:** 09/11/2026  
+**Escopo:** consistência entre requisitos, decisões complementares, arquitetura, modelo/API, armazenamento de imagens, cronograma e registro RNF-01. Não é auditoria de código.
 
-- Documento funcional e técnico original: `README(2).MD`.
-- Lista de achados: `writing-block.md`.
-- Modelo de dados previamente revisado: `NACO_modelo_dados_revisado.md`.
-- Revisão documental anterior: `NACO_relatorio_revisao_completo.md` e `NACO_README_revisado.md`.
-- Decisões anteriores do formulário e histórico de conversa, incluindo decisões de conta/papéis, restaurantes, catálogo, pedidos, avaliações e as QU-01 a QU-73 do RNF-01.
+## 1. Escopo e critério de avaliação
 
-O resultado desta revisão consolida conteúdo documental. Não houve alteração de aplicação, schema, migração, endpoint em código ou integração.
+Esta revisão compara os documentos do ZIP recebido em 09/11/2026 e consolida as decisões já aprovadas até a versão 1.2 do adendo complementar. O objetivo é que todos os documentos-base reflitam a mesma regra, sem duplicar ou reabrir decisões fechadas.
 
-## 2. Comparativo — versão anterior versus consolidação
+**Fora do escopo desta auditoria:** `docs/api/openapi.yaml`, schema Prisma/PostgreSQL, migrations, backend, frontend, integração executável, CI, infraestrutura e resultados de testes. Esses artefatos ainda serão desenvolvidos e, portanto, não reduzem a nota da documentação de planejamento/especificação nesta etapa.
 
-| Tema | Antes | Agora | Natureza da mudança |
-|---|---|---|---|
-| RF-01 a RF-09 | Lista funcional ampla; algumas funcionalidades sem critérios claros. | IDs originais preservados e descrições/aceitação detalhadas a partir das decisões. | Detalhamento documental. |
-| RN-01 | Pedido de um restaurante por vez. | Mantida e associada ao modelo `Order` de um único restaurante. | Preservação. |
-| RN-02 | Um produto com mesmo nome por restaurante, sem normalização. | Regra preservada; normalização e constraint física continuam pendentes. | Lacuna explicitada, não resolvida por suposição. |
-| RN-03/RN-04 | Autorização de responsável e dados pessoais próprios. | Consolidadas com conta única, múltiplos papéis e autorização por restaurante. | Detalhamento documental. |
-| RN-05/RF-02 | RF-02 menciona estabelecimento; entidade `Review` descreve produto. | Decisão aprovada `PRODUCT_ONLY`; uma avaliação por `order_item_id`; pedido próprio concluído; comentário opcional; nota 1–5. | Conflito funcional resolvido. Contrato da rota ainda pendente. |
-| RN-06/RN-07 | Produto sem estoque não vai ao carrinho; exclusão não deve permitir nova compra. | Mantido produto visível/indisponível, snapshots e preservação histórica; estoque baixa somente na confirmação. | Detalhamento e consolidação. |
-| RN-08 | Carrinho depende de usuário logado e restaurante aberto. | Mantida; criação do pedido também exige restaurante publicado. Estrutura de horário ainda pendente. | Detalhamento documental. |
-| RN-09 | Remover produto do carrinho atualiza total. | Mantida; contrato/persistência/endpoint não definidos. | Lacuna preservada. |
-| Cancelamento | Regra geral permitia cancelar em qualquer estado pré-conclusão; tabela detalhada limitava por ator/estado. | Cliente: CRIADO, CONFIRMADO_RESTAURANTE, EM_PREPARO. Responsável: CONFIRMADO_RESTAURANTE. Estados terminais e restauração de estoque documentados. | Contradição resolvida por decisão aprovada. |
-| Conta e papéis | Matriz e modelo não explicitavam conta única e processo de atribuição de papéis. | `SINGLE`; e-mail único; CLIENTE automático; RESPONSAVEL via request/approval e cooldown 7 dias; ADMIN exclusivo, único, manual, hash e sem cadastro público; auditoria para concessões/remoções/aprovações/rejeições. | Decisões de formulário incorporadas. |
-| Restaurante | Modelo já descrevia responsável único, vários restaurantes, publicação e funcionamento separados. | Preservado e ligado aos endpoints de gestão aprovados; restaurante começa UNPUBLISHED; acesso ao painel permanece mesmo despublicado. | Detalhamento documental. |
-| Produto/categoria | `ProductBase`, `RestaurantProduct`, `Category` documentados. | Relações e regras de oferta/categoria no mesmo restaurante consolidadas; snapshots preservados. | Detalhamento documental. |
-| RNF-01 | 1.000 usuários simultâneos e “tempo aceitável”, sem limites. | Especificação QU-01 a QU-73: operações, P95/P99, taxa de erro, ramp-up, duração, dados, cache, RPS, 30 cargas, 60 overhead, 40 concorrência, idempotência, falhas, recuperação e evidências. | Critérios mensuráveis adicionados com aprovação. |
-| RNF-02 | Mensagem compreensível e sem falso sucesso. | Texto preservado; lacunas de retry, classes de falha e rate limiting identificadas. | Sem alteração de requisito; pendências destacadas. |
-| API de restaurantes | Endpoints de gestão estavam em documentação de modelo/revisão. | Os cinco endpoints de gestão permanecem; autenticação identifica responsável e HTTPs documentados permanecem. | Consolidação. |
-| Idempotência | Havia apenas risco de duplo envio/reenvio. | `Idempotency-Key`, escopo por usuário, hash canônico, 24h, tombstone permanente, HTTP 409 para payload diferente, 202 após 5s e endpoint de consulta aprovado. | Complementações técnicas aprovadas; QU-60 requer esclarecimento de fronteira transacional. |
-| Matriz de rastreabilidade | Relações RF/RN/entidades/endpoints/testes parciais. | Matriz consolidada com relações explícitas e “pendente/não especificado” onde não há base. | Organização e detalhamento. |
-| Testes | Cenários negativos e concorrência dispersos; critérios formais insuficientes. | Casos de aceitação/teste agrupados por RF, RN, idempotência, carga, concorrência e recuperação. | Detalhamento derivado das decisões. |
+## 2. Consolidações propagadas
 
-## 3. Resoluções efetivas de conflitos
+| Tema | Estado vigente refletido nos documentos |
+|---|---|
+| Conta, papéis e ADMIN | Conta única; CLIENTE automático; RESPONSAVEL mediante solicitação/aprovação; ADMIN único, exclusivo e criado manualmente; trilha `RoleAuditEvent`. Uma conta pode ter CLIENTE + RESPONSAVEL; mobile/web são superfícies por papel, sem seletor de identidade no login. |
+| Solicitação RESPONSAVEL | `RoleRequest` com estados PENDING/APPROVED/REJECTED, no máximo uma pendente por usuário, cooldown de 7 dias após rejeição e aprovação/concessão na mesma transação. |
+| Transferência | Restaurantes não são apagados ao remover RESPONSAVEL; transferência para outro responsável existente é pré-condição. |
+| Sessão | Access JWT de 15 min; refresh opaco rotativo até 30 dias; hash persistido, revogação por logout/reuso e armazenamento de acordo com plataforma. |
+| Horários | Timezone IANA, grade semanal ISO 1–7, intervalos `HH:mm`, regras de cruzamento de meia-noite; feriados/exceções fora do MVP. |
+| Dinheiro | BRL, `DECIMAL(12,2)` no banco, strings decimais na API; sem `float` binário. |
+| Produto/oferta | `display_name` e `normalized_name` calculado no servidor; unicidade `(restaurant_id, normalized_name)`, inclusive ofertas desativadas. |
+| Carrinho | Local no cliente, um restaurante por carrinho; checkout revalida preço/estoque; sem entidade/API de carrinho no MVP. |
+| Painel | Produtos vendidos = soma de quantidades em pedidos CONCLUIDO; avaliações contadas por data de criação; default 30 dias, máximo 365, timezone do restaurante; sem receita/faturamento. |
+| Pedido recebido | GET de lista/detalhes é consulta pura; inbox consolidada disponível; POST de visualização registra primeira leitura; PATCH altera status. |
+| Avaliações | PRODUCT_ONLY; POST por OrderItem; GET público/paginado por produto sem login; autor “Cliente verificado”, sem dados pessoais. |
+| Idempotência/QU-60 | Criação atômica de IdempotencyRecord + Order + itens sem estoque; confirmação/cancelamento atômicos com estoque + status + evento; baixa só na confirmação. |
+| Stack | Monólito modular; Node.js 26 LTS, Express, TypeScript strict, PostgreSQL/Prisma, Redis, React Native, React, Zod, Cloudinary/StoragePort, testes e CI conforme adendo. |
+| Imagens | Cloudinary Free via StoragePort; sem cartão, upgrade ou cobrança sem autorização explícita; upload backend-only, processamento/EXIF/WebP, operações persistentes, `destroy` + `invalidate=true` best effort. |
 
-1. **Cancelamento:** a matriz aprovada por papel/estado prevalece sobre a frase geral original que permitia cancelamento em qualquer etapa anterior a CONCLUIDO.
-2. **Avaliações:** RF-02/RN-05 passam a tratar somente avaliações de produtos adquiridos, uma por `OrderItem`, depois de pedido `CONCLUIDO`. O caminho exato da rota ainda não foi alterado.
-3. **Estado de conclusão:** `CONCLUIDO` é a forma canônica no domínio/API/persistência; “Concluído” pode ser texto exibido na interface.
-4. **Conta e papéis:** a regra SINGLE, papéis compostos, ADMIN exclusivo e fluxos de concessão foram definidos; detalhes de persistência de solicitações/auditoria ainda faltam.
-5. **RNF-01:** os limites e a metodologia mensurável substituem a expressão vaga “tempo aceitável”, mantendo o requisito original de 1.000 usuários simultâneos.
+## 3. Correções realizadas nesta consolidação
 
-## 4. Impactos documentados que não foram aplicados unilateralmente
+1. Substituídas as listas de “pendências” obsoletas na especificação, arquitetura e auditoria por itens que realmente ainda exigem contrato, implementação ou operação.
+2. Sincronizadas as entidades lógicas `RoleRequest`, `RoleAuditEvent`, `OrderView` e `IdempotencyRecord` no modelo de dados; separada a etapa de schema físico/migrations.
+3. Corrigidas as rotas de pedidos recebidos: GET para consulta, `POST /api/orders/{orderId}/views` para visualização idempotente e `PATCH /api/orders/{orderId}/status` para transições.
+4. Corrigido o contrato do dashboard para exigir `restaurantId` e validar ownership.
+5. Sincronizadas as rotas de avaliações PRODUCT_ONLY e a leitura pública de avaliações por produto.
+6. Registrada a resolução posterior de QU-60 sem alterar a regra de estoque.
+7. Atualizado o cronograma para incluir leitura pública de avaliações e testes associados.
+8. Corrigida a referência à licença: o repositório contém `LICENSE` MIT.
+9. Clarificada a margem preventiva de 90% do uso Cloudinary como salvaguarda técnica recomendada/configurável, não como decisão de produto; o bloqueio de novos uploads ao limite gratuito permanece a decisão aprovada.
+10. Corrigida a distinção entre contrato lógico decidido e artefatos executáveis ainda futuros (OpenAPI, schema físico, migrations, código e testes).
+11. Corrigida a matriz de rastreabilidade RF-08, que ainda dizia incorretamente que a rota de transição de pedidos não estava formalizada; alinhada ao `PATCH /api/orders/{orderId}/status`.
+12. Removidas dependências órfãs P-01…P-12 do cronograma, substituídas pelos contratos residuais e políticas operacionais identificados nos documentos; corrigida a dependência de OrderView, já aprovada, e removida uma linha D10 duplicada.
 
-| Decisão | Impacto | Por que ainda exige aprovação/esclarecimento |
-|---|---|---|
-| RF-02 `PRODUCT_ONLY` | Endpoint original `/api/restaurants/:id/reviews` sugere avaliação do restaurante. | É necessário aprovar rota/contrato compatível com avaliação de produto; não foi inventado novo caminho. |
-| QU-52 | Endpoint específico `GET /api/orders/idempotency/{key}`. | Endpoint foi explicitamente escolhido; contrato de resposta detalhado continua pendente. |
-| QU-60 | Atomicidade da chave, criação de pedido e operações relacionadas ao estoque. | A regra original/aprovada diz que estoque é baixado apenas na confirmação; não se pode deslocar a baixa para a criação sem nova aprovação. |
-| RESPONSAVEL request/approval | Exige registrar solicitações e auditoria em algum meio persistente. | Nome da entidade, campos, estados e endpoints não foram aprovados. |
-| ADMIN | Escopo `FULL` limitado pela matriz e auditável; matriz original exige autorização prévia para certas ações. | O procedimento e autoridade da autorização prévia não foram definidos. |
-| `GET /api/restaurants/:restaurantId/orders` | Finalidade de receber/aceitar, acesso descrito como Cliente proprietário. | Ator, método/finalidade e rota de mudança de status precisam de decisão; caminho original fica preservado. |
+## 4. Itens que continuam a exigir detalhamento
 
-## 5. Pendências remanescentes detalhadas
+### 4.1. Contratos para a futura OpenAPI
 
-### 5.1. Funcionais e de domínio
+- Rotas/DTOs de consulta e gestão de categorias.
+- Path, request, response e erros do upload de imagem pelo responsável.
+- Mecanismo operacional/administrativo de reprocessamento de `StorageDeletionOperation`.
+- Schema de resposta/erros do POST de visualização e filtros/DTO completo do dashboard.
+- Nomes e tipos dos filtros de consulta administrativa de operações de upload.
 
-- **Rota pedidos recebidos:** confirmar ator correto (responsável ou cliente), finalidade precisa e método HTTP; definir em que rota/contrato o responsável confirma/recusa/transiciona o pedido.
-- **Avaliações:** decidir contrato/rota de avaliação de produto que corresponda à decisão `PRODUCT_ONLY` sem inferir alteração do endpoint legado.
-- **Produto com nome duplicado:** definir normalização (caixa, espaços, acentos, Unicode) e entidade/campo em que se aplica RN-02.
-- **Horários:** definir estrutura de `opening_hours`, timezone, intervalos que cruzam meia-noite, exceções/feriados e como derivar `operating_status`.
-- **Carrinho:** definir se é mantido no cliente ou persistido no servidor, seus campos/vida útil e operações de remoção/atualização; não criar rota até aprovação.
-- **Perfil:** definir campos editáveis e contrato/endereço de atualização.
-- **Painel:** definir catálogo de métricas, fórmulas, janela temporal, filtros, paginação e tratamento de dados simulados.
-- **Conta e perda de papel:** definir como impedir múltiplas solicitações pendentes; se criação de solicitação gera auditoria; como administrar restaurantes quando responsável perde papel sem apagá-los automaticamente.
-- **ADMIN:** esclarecer mecanismo de autorização prévia para ações da matriz, mantendo ADMIN exclusivo, único e auditável.
+### 4.2. Operação e segurança
 
-### 5.2. Financeiro, sessão e segurança
+- Política de moderação, denúncia e retenção de avaliações públicas, sem dados pessoais na visualização pública.
+- Comportamento fail-safe/degraded quando Redis estiver indisponível, principalmente no rate limiting.
+- Monitoramento Cloudinary com cache/frequência conservadora, idade da última leitura, tratamento de erro/dados atrasados e alertas. O patamar preventivo de 90% é recomendação técnica configurável; bloquear novos uploads no limite gratuito é a decisão de produto.
+- Evidência/procedimento externo de autorização do proprietário para ações ADMIN sensíveis.
+- Guards de navegação por papel e seletor explícito de restaurante na tela de dashboard para responsáveis com vários estabelecimentos.
+- Ajustar SLO/RPO/RTO e retenção após staging, preservando os baselines aprovados até então.
+- Fixar limites concretos de CPU/memória/timeouts e qualidade WebP na configuração do sistema.
 
-- Precisão/escala monetária, moeda e arredondamento de `price`, `unit_price`, `subtotal` e `total`.
-- JWT: validade, refresh, expiração, logout/revogação e compatibilidade com persistência local descrita no original como período indeterminado.
-- Política de senhas, algoritmo/parâmetros de hash, rate limiting concreto, bloqueio/limite de tentativas e regras de retenção/privacidade.
+### 4.3. Entregas futuras esperadas
 
-### 5.3. API e idempotência
+- Criar `docs/api/openapi.yaml` antes do freeze da API executável.
+- Criar schema Prisma/PostgreSQL, constraints, índices, seeds e migrations.
+- Implementar módulos backend, clientes mobile/web, integração Cloudinary, Redis, observabilidade e CI/CD.
+- Executar testes unitários, integração, segurança, carga (130 execuções RNF-01), concorrência, recuperação e homologação; registrar resultados reais.
 
-- Padronizar HTTP 400 versus 422, 403 versus 404, estrutura e significado de `error.code`.
-- Confirmar mapeamento DTO/modelo: `situation`/`status`, `productId`/`restaurant_product_id`, `price`/`unit_price`.
-- Definir body/campos do 202, formato da referência, resposta do endpoint de consulta, status para chave ausente/expirada e resposta externa quando chave pertence a outro usuário sem vazar existência.
-- Definir classificação do HTTP 409 por payload diferente no cálculo da taxa de erro técnico (QU-03 explicitamente exclui 409 de estoque; o tratamento geral de 409 de idempotência não foi separado nessa decisão).
-- Definir campos exatos incluídos no payload canônico/hash.
-- **QU-60:** confirmar atomicidade idempotência/pedido separada da baixa de estoque em confirmação e restauração em cancelamento; não há aprovação para baixar estoque ao criar pedido.
-- Definir schema físico/índices/tombstone permanente do registro idempotente.
+A ausência desses artefatos é compatível com o estágio de planejamento e não é tratada como falha documental nem como evidência de conclusão.
 
-### 5.4. Operacionais e qualidade
+## 5. Resultado da auditoria
 
-- RNF-02: classes de falha, condições de retry, backoff, número máximo, rate limiting e quais operações podem ser repetidas com segurança.
-- Disponibilidade/SLA e janela de manutenção.
-- Política de backup, retenção, restauração, RPO/RTO.
-- Observabilidade operacional geral (logs, métricas, tracing, alertas e retenção) além das métricas exigidas na campanha RNF-01.
-- Estratégia de testes: critérios de entrada/saída, cobertura, regressão e gates de liberação.
-- Acessibilidade: escopo e critérios.
-- Decisões finais sobre stack por componente; tabela original apresenta opções, não stack final.
-- Governança e prioridade individual, se o projeto quiser formalizar versão/status/aprovação e prioridade.
+**Nota da documentação: 8,8/10.** A avaliação cobre exclusivamente a qualidade da especificação, arquitetura, rastreabilidade, contratos lógicos, segurança planejada, estratégia de testes e planejamento. Não avalia implementação.
 
-### 5.5. Modelagem física
+| Dimensão | Nota | Fundamentação |
+|---|---:|---|
+| Requisitos e regras de negócio | 9,2 | Regras relevantes e critérios de aceite amplos, com regras de estoque, pedidos, papéis e reviews. |
+| Rastreabilidade e decisões | 9,0 | Adendo central, decisões e histórico RNF-01; decisões tardias propagadas. |
+| Arquitetura e segurança | 9,0 | Monólito modular, limites de módulos, autorização backend, sessão, privacidade e retries. |
+| Modelo lógico de dados | 8,7 | Entidades, relações e constraints conceituais claras; schema físico ainda será materializado. |
+| Contratos lógicos da API | 8,5 | Principais rotas, métodos, atores e erros definidos; categorias e upload ainda demandam contrato detalhado. |
+| Armazenamento de imagens | 9,1 | Fluxo Cloudinary bem definido, operações persistentes, retries, invalidação best effort e preservação da imagem anterior. |
+| Estratégia de testes | 8,9 | Critérios quantitativos RNF-01, cenários de integridade, idempotência e concorrência; execução futura. |
+| Cronograma | 8,4 | Fases, dependências e DoD definidos; estimativas precisam ser recalibradas durante a execução. |
+| Consistência entre documentos | 8,8 | Conflitos principais eliminados; itens futuros explicitamente separados de decisões fechadas. |
 
-- Constraints/índices físicos para categoria/oferta no mesmo restaurante.
-- Garantia de ADMIN globalmente único e exclusivo, além das regras de papel.
-- Persistência para solicitação de RESPONSAVEL e auditoria de papéis.
-- Persistência idempotente e retenção dos tombstones.
-- Índices adicionais não devem ser inventados como requisitos físicos antes do schema; documentar no schema definitivo.
+## 6. Limites e checklist de validação
 
-## 6. Auditoria de preservação
-
-| Item de auditoria | Resultado | Evidência documental |
-|---|---|---|
-| IDs RF-01 a RF-09 preservados | Passou | Especificação seção 3 e matriz de rastreabilidade. |
-| IDs RN-01 a RN-09 preservados | Passou | Especificação seção 4. |
-| RNF-01 e RNF-02 preservados | Passou | Especificação seção 5; RNF-01 detalhado; RNF-02 sem expansão não aprovada. |
-| 73 decisões QU registradas | Passou | `03_REGISTRO_DECISOES_RNF01.md`. |
-| Decisões de conta/papéis preservadas | Passou com pendências explícitas | Especificação seção 4.1 e modelo de dados seção 1. |
-| Regras de restaurante/publicação preservadas | Passou | Especificação seção 4.2 e modelo seção 1.5. |
-| Separação `ProductBase`/`RestaurantProduct` e categorias preservada | Passou | Modelo seções 1.6–1.8. |
-| Estados de pedido e cancelamento aprovados refletidos | Passou | Especificação seção 4.4. |
-| Estoque baixado somente na confirmação | Passou, com conflito QU-60 destacado | Especificação seção 4.4/5.1; modelo seção 4. |
-| Review PRODUCT_ONLY/ONE e campos sem redundância | Passou | Especificação seção 4.5 e modelo seção 1.11. |
-| `OrderEvent` e rastreabilidade preservados | Passou | Modelo seção 1.12. |
-| Endpoints originais preservados | Passou; conflitos mantidos | Modelo seção 5.1. |
-| Endpoints de gestão de restaurante preservados | Passou | Modelo seção 5.2. |
-| Único novo endpoint adicional (idempotência) tem decisão explícita | Passou | QU-52 e modelo seção 5.3. |
-| Tecnologias/integrações não substituídas | Passou | README atualizado mantém caráter de opções da tabela original. |
-| Nenhum código foi implementado/alterado | Passou | Escopo desta entrega é exclusivamente documental. |
-
-## 7. Limites da auditoria
-
-- A auditoria valida a consistência da documentação produzida contra os arquivos-base e o histórico de decisões disponível nesta conversa.
-- Ela não substitui revisão jurídica, inspeção de schema/código, execução de testes ou validação em ambiente real.
-- Como não existe schema físico/código a revisar nesta tarefa, as constraints são descritas como regras conceituais quando a implementação física ainda não foi definida.
-- Não é possível declarar o RNF-01 aprovado em execução: os 130 testes planejados ainda precisam ser realizados e seus resultados preservados.
-
-## 8. Resultado
-
-**Consolidação documental concluída com ressalvas identificadas.** Os requisitos e decisões explicitamente aprovados foram incorporados. As lacunas não decididas foram mantidas como pendências; os impactos de contrato/modelagem que exigem nova aprovação estão destacados. Nenhuma implementação de código foi iniciada.
+- A auditoria é documental: não foram executados código, schema físico, migrations, CI, segurança dinâmica ou campanhas de carga.
+- Os arquivos `openapi.yaml`, schema físico, migrations e testes de execução não foram criados nesta atualização.
+- PDFs da arquitetura mestre (69 páginas), armazenamento de imagens (14 páginas) e cronograma (10 páginas, regenerado após as correções) foram renderizados e inspecionados visualmente. Não foram identificados cortes ou sobreposições graves; os três usam papel Letter.
+- Links locais, destinos dos PDFs, estrutura do ZIP e ausência intencional de `openapi.yaml` foram validados na entrega. O OpenAPI, schema físico, migrations, código e testes executáveis permanecem planejados para desenvolvimento.
